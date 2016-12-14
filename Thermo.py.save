@@ -1,0 +1,101 @@
+import RPi.GPIO as IoPort
+import datetime
+import time
+import MySQLdb
+import paho.mqtt.client as mqtt 
+
+db=MySQLdb.connect("localhost","root","1234","dht11")
+curs=db.cursor()
+
+mqttc=mqtt.Client("python_pub")
+mqttc.connect("127.0.0.1",1883)
+
+print('start')
+
+def InitPort() :
+
+	IoPort.setmode(IoPort.BCM)
+	IoPort.setup(4,IoPort.OUT)
+	IoPort.output(4,IoPort.HIGH)
+	time.sleep(0.025)
+	IoPort.output(4,IoPort.LOW)
+        time.sleep(0.02)
+        IoPort.setup(4,IoPort.IN, pull_up_down=IoPort.PUD_UP)
+
+def MakeBit():
+	btval=[];
+	lcount=0;
+	flag=0;
+
+	for bt in data :
+		if flag==0:
+			if bt==0:
+				continue
+			else:	
+				lcount=1
+				flag=1
+		else:
+			if bt==1:
+				lcount=lcount+1
+			else:
+				if lcount>8:
+					btval.append(1)
+				else:
+					btval.append(0)
+				flag=0
+	return btval
+while True:
+	data=[]
+	InitPort()
+	for i in range(0,1000):
+		data.append(IoPort.input(4))
+	bitval=MakeBit()
+	if len(bitval)<40:
+		continue
+	tval=[]
+	pos=0
+	val1=0
+	bitval.remove(1)
+	for bt in bitval:
+		val1=val1*2
+		val1=val1+bt
+		pos=pos+1
+		if pos==8 :
+			tval.append(val1)
+			val1=0
+			pos=0
+	tval.append(val1)
+	if len(tval)<5 :
+		continue
+	Total=0
+
+
+	print('3 succes ')
+
+
+	for i in range(0,4):
+		Total=Total+tval[i]
+	
+	if Total==tval[4]:
+		a=tval[0]
+		b=tval[2]
+		mqttc.publish("environment/ultrasonic",b)
+
+		print('Humindty:',a)
+		print('temperature:',b)
+		insert= (
+			"INSERT INTO temperature (date,temperature,humidty) VALUES(%s,%s,%s)"
+                		)
+		data=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),a,b)
+
+		curs.execute(insert,data)
+	
+
+                db.commit()
+		print('end db')
+		time.sleep(1)
+
+mqttc.loop_forever()
+
+
+
